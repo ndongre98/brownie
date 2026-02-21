@@ -1,33 +1,33 @@
-import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { FlatList, StyleSheet, TouchableOpacity, View, Alert } from 'react-native';
 import { ReactElement } from 'react';
 
 import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { ItemConfig, TodoItem } from '@/components/Item';
+import { ItemConfig, RewardItem } from '@/components/Item';
 import { SwipeableItem } from '@/components/SwipeableItem';
 import { ItemModal } from '@/components/ItemModal';
 import { useItemList } from '@/hooks/useItemList';
 import { usePoints } from '@/contexts/PointsContext';
 
-const todoConfig: ItemConfig = {
-  itemType: 'todo',
-  pointsLabel: 'Points',
-  addButtonLabel: 'Add Todo',
-  screenTitle: 'Brownie Todos',
-  modalTitleAdd: 'Add New Todo',
-  modalTitleEdit: 'Edit Todo',
-  itemNameLabel: 'Todo Name',
-  emptyMessage: 'No todos yet. Tap "Add Todo" to get started.',
+const rewardConfig: ItemConfig = {
+  itemType: 'reward',
+  pointsLabel: 'Cost',
+  addButtonLabel: 'Add Reward',
+  screenTitle: 'Brownie Rewards',
+  modalTitleAdd: 'Add New Reward',
+  modalTitleEdit: 'Edit Reward',
+  itemNameLabel: 'Reward Name',
+  emptyMessage: 'No rewards yet. Tap "Add Reward" to get started.',
   resetLabel: 'Reset',
   editLabel: 'Edit',
   deleteLabel: 'Delete',
 };
 
-export default function TodosScreen() {
+export default function RewardsScreen() {
   const {
-    items: todos,
-    setItems: setTodos,
+    items: rewards,
+    setItems: setRewards,
     modalVisible,
     editingItemId,
     nameInput,
@@ -43,22 +43,29 @@ export default function TodosScreen() {
     handleComplete: baseHandleComplete,
     handleResetCount,
     handleDelete,
-  } = useItemList<TodoItem>();
+  } = useItemList<RewardItem>();
 
-  const { logActivity } = usePoints();
+  const { points, logActivity } = usePoints();
 
   const handleComplete = (id: string) => {
-    const todo = todos.find((t) => t.id === id);
-    if (todo) {
-      baseHandleComplete(id);
-      // Log point change if todo has points (activity log is source of truth for points)
-      if (todo.points && todo.points > 0) {
-        logActivity('todo_completed', todo.text, todo.points);
+    const reward = rewards.find((r) => r.id === id);
+    if (reward) {
+      // Check if reward has a cost and if user has enough points
+      if (reward.cost && reward.cost > 0) {
+        if (points < reward.cost) {
+          Alert.alert(
+            'Insufficient Points',
+            `You need ${reward.cost} points to redeem this reward. You currently have ${points} points.`
+          );
+          return;
+        }
+        logActivity('reward_redeemed', reward.text, -reward.cost);
       }
+      baseHandleComplete(id);
     }
   };
 
-  const handleAddTodo = () => {
+  const handleAddReward = () => {
     const trimmed = nameInput.trim();
     if (!trimmed) return;
 
@@ -66,35 +73,35 @@ export default function TodosScreen() {
     const maxFrequency =
       Number.isNaN(parsedFrequency) || parsedFrequency <= 0 ? undefined : parsedFrequency;
 
-    const parsedPoints = Number.parseInt(pointsInput, 10);
-    const points = Number.isNaN(parsedPoints) || parsedPoints < 0 ? undefined : parsedPoints;
+    const parsedCost = Number.parseInt(pointsInput, 10);
+    const cost = Number.isNaN(parsedCost) || parsedCost < 0 ? undefined : parsedCost;
 
     if (editingItemId) {
-      // Update existing todo
-      setTodos((current) =>
-        current.map((todo): TodoItem => {
-          if (todo.id === editingItemId) {
+      // Update existing reward
+      setRewards((current) =>
+        current.map((reward): RewardItem => {
+          if (reward.id === editingItemId) {
             return {
-              id: todo.id,
+              id: reward.id,
               text: trimmed,
               maxFrequency,
-              points,
-              completionsToday: todo.completionsToday,
-              lastCompletionDate: todo.lastCompletionDate,
+              cost,
+              completionsToday: reward.completionsToday,
+              lastCompletionDate: reward.lastCompletionDate,
             };
           }
-          return todo;
+          return reward;
         })
       );
     } else {
-      // Add new todo
+      // Add new reward
       const today = new Date().toISOString().split('T')[0];
-      setTodos((current) => [
+      setRewards((current) => [
         {
           id: Date.now().toString(),
           text: trimmed,
           maxFrequency,
-          points,
+          cost,
           completionsToday: 0,
           lastCompletionDate: today,
         },
@@ -106,11 +113,11 @@ export default function TodosScreen() {
     handleCancel();
   };
 
-  const handleEditTodo = (todo: TodoItem) => {
-    setNameInput(todo.text);
-    setFrequencyInput(todo.maxFrequency?.toString() || '');
-    setPointsInput(todo.points?.toString() || '');
-    setEditingItemId(todo.id);
+  const handleEditReward = (reward: RewardItem) => {
+    setNameInput(reward.text);
+    setFrequencyInput(reward.maxFrequency?.toString() || '');
+    setPointsInput(reward.cost?.toString() || '');
+    setEditingItemId(reward.id);
     setModalVisible(true);
   };
 
@@ -121,44 +128,44 @@ export default function TodosScreen() {
       headerBackgroundColor={{ light: '#F4D6C8', dark: '#2B1811' }}
       headerImage={emptyHeaderImage}>
       <ThemedView style={styles.header}>
-        <ThemedText type="title">{todoConfig.screenTitle}</ThemedText>
+        <ThemedText type="title">{rewardConfig.screenTitle}</ThemedText>
         <TouchableOpacity
           onPress={openAddModal}
           style={styles.addButton}
           accessibilityRole="button"
-          accessibilityLabel="Add new todo">
+          accessibilityLabel="Add new reward">
           <ThemedText type="defaultSemiBold" style={styles.addButtonText}>
-            {todoConfig.addButtonLabel}
+            {rewardConfig.addButtonLabel}
           </ThemedText>
         </TouchableOpacity>
       </ThemedView>
 
       <FlatList
         style={styles.list}
-        data={todos}
+        data={rewards}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={todos.length === 0 && styles.emptyListContainer}
+        contentContainerStyle={rewards.length === 0 && styles.emptyListContainer}
         renderItem={({ item }) => (
           <SwipeableItem
             item={item}
-            config={todoConfig}
-            getPointsValue={(item) => item.points}
+            config={rewardConfig}
+            getPointsValue={(item) => item.cost}
             onComplete={() => handleComplete(item.id)}
             onReset={() => handleResetCount(item.id)}
-            onEdit={() => handleEditTodo(item)}
+            onEdit={() => handleEditReward(item)}
             onDelete={() => handleDelete(item.id)}
           />
         )}
         ListEmptyComponent={
           <ThemedText type="default" style={styles.emptyText}>
-            {todoConfig.emptyMessage}
+            {rewardConfig.emptyMessage}
           </ThemedText>
         }
       />
 
       <ItemModal
         visible={modalVisible}
-        config={todoConfig}
+        config={rewardConfig}
         isEditing={editingItemId !== null}
         nameValue={nameInput}
         nameOnChange={setNameInput}
@@ -167,7 +174,7 @@ export default function TodosScreen() {
         frequencyValue={frequencyInput}
         frequencyOnChange={setFrequencyInput}
         onCancel={handleCancel}
-        onSubmit={handleAddTodo}
+        onSubmit={handleAddReward}
       />
     </ParallaxScrollView>
   );
